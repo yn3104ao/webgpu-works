@@ -60,8 +60,8 @@
 
         <div class="row">
             <span>Car Position X</span>
-            <input type="range" id="p_pos" min="-1.5" max="0.5" step="0.1" value="-1.0">
-            <span id="v_pos" class="val">-1.0</span>
+            <input type="range" id="p_pos" min="-1.5" max="0.5" step="0.1" value="-0.5">
+            <span id="v_pos" class="val">-0.5</span>
         </div>
         <div class="row">
             <span>Substeps</span>
@@ -511,7 +511,7 @@
             const obs = createTex3D('r16float', 0);
 
             // --- IMPROVED SDF Setup ---
-            const updateModel = (xShift = -1.0, drs = false) => {
+            const updateModel = (xShift = -0.5, drs = false) => {
                 const [W,H,D] = SIZE;
                 const data = new Float32Array(W*H*D);
                 const length2 = (x,y) => Math.sqrt(x*x + y*y);
@@ -596,7 +596,7 @@
             };
 
             // Initial Model Update
-            updateModel(-1.0, false);
+            updateModel(-0.5, false);
 
             const smp = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
             const mod = device.createShaderModule({ code: shaderCode });
@@ -837,4 +837,5 @@
     </script>
 </body>
 </html>
+
 
