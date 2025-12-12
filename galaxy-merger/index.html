@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGPU Galaxy Sandbox</title>
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; color: #fff; font-family: 'Roboto Mono', monospace; user-select: none; }
+        canvas { width: 100vw; height: 100vh; display: block; }
+
+        #ui {
+            position: absolute; top: 20px; left: 20px;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 20px; border-left: 2px solid #f80;
+            border-radius: 0 10px 10px 0;
+            width: 300px;
+            pointer-events: auto;
+            box-shadow: 0 0 30px rgba(255, 136, 0, 0.1);
+            max-height: 90vh; overflow-y: auto;
+        }
+        h1 { margin: 0 0 5px 0; font-size: 18px; color: #f80; text-transform: uppercase; letter-spacing: 2px; }
+        .subtitle { font-size: 10px; color: #aaa; margin-bottom: 15px; }
+
+        .control-group { margin-bottom: 12px; }
+        label { display: flex; justify-content: space-between; font-size: 11px; color: #ccc; margin-bottom: 4px; }
+        input[type=range] { width: 100%; accent-color: #f80; height: 4px; margin: 0; cursor: pointer; }
+        select { background:#222; color:#fff; border:1px solid #444; width:100%; padding:5px; font-family:inherit; font-size:11px; }
+
+        button {
+            width: 100%; background: #222; color: #f80; border: 1px solid #f80;
+            padding: 10px; cursor: pointer; font-weight: bold; font-family: inherit; font-size: 12px;
+            transition: 0.2s; text-transform: uppercase;
+        }
+        button:hover { background: #f80; color: #000; box-shadow: 0 0 15px #f80; }
+
+        .hint {
+            position: absolute; bottom: 30px; width: 100%; text-align: center;
+            font-size: 12px; color: #666; pointer-events: none;
+        }
+        .k { color: #f80; font-weight: bold; background: rgba(255,136,0,0.1); padding: 2px 5px; border-radius: 4px; border: 1px solid #f80; }
+
+        #fps { position: absolute; top: 20px; right: 20px; color: #444; font-size: 10px; }
+
+        #ui::-webkit-scrollbar { width: 6px; }
+        #ui::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div id="fps">FPS: 60</div>
+    <div id="ui">
+        <h1>Galaxy Sandbox</h1>
+        <div class="subtitle">N-Body + SPH (Input Fix)</div>
+
+        <div class="control-group">
+            <label><span>Star Count</span> <span id="v_count">16384</span></label>
+            <select id="p_count">
+                <option value="4096">4k (Debug)</option>
+                <option value="16384" selected>16k (Smooth)</option>
+                <option value="32768">32k (Rich)</option>
+                <option value="65536">65k (Heavy)</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label><span>Time Step</span> <span id="v_dt">0.01</span></label>
+            <input type="range" id="p_dt" min="0.001" max="0.02" step="0.001" value="0.01">
+        </div>
+
+        <div class="control-group">
+            <label><span>Gravity (G)</span> <span id="v_g">0.5</span></label>
+            <input type="range" id="p_g" min="0.1" max="2.0" step="0.1" value="0.5">
+        </div>
+
+        <div class="control-group">
+            <label><span>Gas Pressure</span> <span id="v_pressure">1.0</span></label>
+            <input type="range" id="p_pressure" min="0.0" max="5.0" step="0.1" value="1.0">
+        </div>
+
+        <div class="control-group">
+            <label><span>Viscosity</span> <span id="v_visc">0.05</span></label>
+            <input type="range" id="p_visc" min="0.0" max="0.2" step="0.001" value="0.05">
+        </div>
+
+        <div class="control-group">
+            <label><span>Softening</span> <span id="v_soft">0.1</span></label>
+            <input type="range" id="p_soft" min="0.01" max="0.5" step="0.01" value="0.1">
+        </div>
+
+        <div class="control-group">
+            <label><span>Star Size</span> <span id="v_size">1.5</span></label>
+            <input type="range" id="p_size" min="0.1" max="5.0" step="0.1" value="1.5">
+        </div>
+
+        <button id="btn_reset">RESET: 1 MAIN + 2 SUBS</button>
+    </div>
+
+    <div class="hint">
+        <span class="k">Shift + Drag</span> to Grab & Throw &nbsp;|&nbsp; <span class="k">L-Drag</span> Rotate &nbsp;|&nbsp; <span class="k">Wheel</span> Zoom
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <script type="module">
+        // Internal Math Lib
+        const Mat4 = {
+            create: () => new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]),
+            perspective: (out, fovy, aspect, near, far) => {
+                const f = 1.0 / Math.tan(fovy / 2);
+                out[0] = f / aspect; out[1] = 0; out[2] = 0; out[3] = 0;
+                out[4] = 0; out[5] = f; out[6] = 0; out[7] = 0;
+                out[8] = 0; out[9] = 0;
+                out[10] = far / (near - far);
+                out[11] = -1;
+                out[12] = 0; out[13] = 0;
+                out[14] = (near * far) / (near - far);
+                out[15] = 0;
+                return out;
+            },
+            lookAt: (out, eye, center, up) => {
+                let x0, x1, x2, y0, y1, y2, z0, z1, z2, len;
+                let eyex = eye[0], eyey = eye[1], eyez = eye[2];
+                let upx = up[0], upy = up[1], upz = up[2];
+                let centerx = center[0], centery = center[1], centerz = center[2];
+                z0 = eyex - centerx; z1 = eyey - centery; z2 = eyez - centerz;
+                len = 1 / Math.hypot(z0, z1, z2); z0 *= len; z1 *= len; z2 *= len;
+                x0 = upy * z2 - upz * z1; x1 = upz * z0 - upx * z2; x2 = upx * z1 - upy * z0;
+                len = Math.hypot(x0, x1, x2);
+                if (!len) { x0 = 0; x1 = 0; x2 = 0; } else { len = 1 / len; x0 *= len; x1 *= len; x2 *= len; }
+                y0 = z1 * x2 - z2 * x1; y1 = z2 * x0 - z0 * x2; y2 = z0 * x1 - z1 * x0;
+                len = Math.hypot(y0, y1, y2);
+                if (!len) { y0 = 0; y1 = 0; y2 = 0; } else { len = 1 / len; y0 *= len; y1 *= len; y2 *= len; }
+                out[0] = x0; out[1] = y0; out[2] = z0; out[3] = 0;
+                out[4] = x1; out[5] = y1; out[6] = z1; out[7] = 0;
+                out[8] = x2; out[9] = y2; out[10] = z2; out[11] = 0;
+                out[12] = -(x0 * eyex + x1 * eyey + x2 * eyez);
+                out[13] = -(y0 * eyex + y1 * eyey + y2 * eyez);
+                out[14] = -(z0 * eyex + z1 * eyey + z2 * eyez);
+                out[15] = 1;
+                return out;
+            },
+            multiply: (out, a, b) => {
+                let a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3];
+                let a10 = a[4], a11 = a[5], a12 = a[6], a13 = a[7];
+                let a20 = a[8], a21 = a[9], a22 = a[10], a23 = a[11];
+                let a30 = a[12], a31 = a[13], a32 = a[14], a33 = a[15];
+                let b0 = b[0], b1 = b[1], b2 = b[2], b3 = b[3];
+                out[0] = b0*a00 + b1*a10 + b2*a20 + b3*a30;
+                out[1] = b0*a01 + b1*a11 + b2*a21 + b3*a31;
+                out[2] = b0*a02 + b1*a12 + b2*a22 + b3*a32;
+                out[3] = b0*a03 + b1*a13 + b2*a23 + b3*a33;
+                b0 = b[4]; b1 = b[5]; b2 = b[6]; b3 = b[7];
+                out[4] = b0*a00 + b1*a10 + b2*a20 + b3*a30;
+                out[5] = b0*a01 + b1*a11 + b2*a21 + b3*a31;
+                out[6] = b0*a02 + b1*a12 + b2*a22 + b3*a32;
+                out[7] = b0*a03 + b1*a13 + b2*a23 + b3*a33;
+                b0 = b[8]; b1 = b[9]; b2 = b[10]; b3 = b[11];
+                out[8] = b0*a00 + b1*a10 + b2*a20 + b3*a30;
+                out[9] = b0*a01 + b1*a11 + b2*a21 + b3*a31;
+                out[10] = b0*a02 + b1*a12 + b2*a22 + b3*a32;
+                out[11] = b0*a03 + b1*a13 + b2*a23 + b3*a33;
+                b0 = b[12]; b1 = b[13]; b2 = b[14]; b3 = b[15];
+                out[12] = b0*a00 + b1*a10 + b2*a20 + b3*a30;
+                out[13] = b0*a01 + b1*a11 + b2*a21 + b3*a31;
+                out[14] = b0*a02 + b1*a12 + b2*a22 + b3*a32;
+                out[15] = b0*a03 + b1*a13 + b2*a23 + b3*a33;
+                return out;
+            },
+            invert: (out, a) => {
+                let a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3];
+                let a10 = a[4], a11 = a[5], a12 = a[6], a13 = a[7];
+                let a20 = a[8], a21 = a[9], a22 = a[10], a23 = a[11];
+                let a30 = a[12], a31 = a[13], a32 = a[14], a33 = a[15];
+                let b00 = a00 * a11 - a01 * a10, b01 = a00 * a12 - a02 * a10, b02 = a00 * a13 - a03 * a10;
+                let b03 = a01 * a12 - a02 * a11, b04 = a01 * a13 - a03 * a11, b05 = a02 * a13 - a03 * a12;
+                let b06 = a20 * a31 - a21 * a30, b07 = a20 * a32 - a22 * a30, b08 = a20 * a33 - a23 * a30;
+                let b09 = a21 * a32 - a22 * a31, b10 = a21 * a33 - a23 * a31, b11 = a22 * a33 - a23 * a32;
+                let det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
+                if (!det) return null;
+                det = 1.0 / det;
+                out[0] = (a11 * b11 - a12 * b10 + a13 * b09) * det;
+                out[1] = (a02 * b10 - a01 * b11 - a03 * b09) * det;
+                out[2] = (a31 * b05 - a32 * b04 + a33 * b03) * det;
+                out[3] = (a22 * b04 - a21 * b05 - a23 * b03) * det;
+                out[4] = (a12 * b08 - a10 * b11 - a13 * b07) * det;
+                out[5] = (a00 * b11 - a02 * b08 + a03 * b07) * det;
+                out[6] = (a32 * b02 - a30 * b05 - a33 * b01) * det;
+                out[7] = (a20 * b05 - a22 * b02 + a23 * b01) * det;
+                out[8] = (a10 * b10 - a11 * b08 + a13 * b06) * det;
+                out[9] = (a01 * b08 - a00 * b10 - a03 * b06) * det;
+                out[10] = (a30 * b04 - a31 * b02 + a33 * b00) * det;
+                out[11] = (a21 * b02 - a20 * b04 - a23 * b00) * det;
+                out[12] = (a11 * b07 - a10 * b09 - a12 * b06) * det;
+                out[13] = (a00 * b09 - a01 * b07 + a02 * b06) * det;
+                out[14] = (a31 * b01 - a30 * b03 - a32 * b00) * det;
+                out[15] = (a20 * b03 - a21 * b01 + a22 * b00) * det;
+                return out;
+            }
+        };
+
+        const WORKGROUP_SIZE = 256;
+
+        // WGSL Shader
+        const shaderCode = `
+        struct Params {
+            count: f32,
+            dt: f32,
+            G: f32,
+            soft: f32,
+            mouseFlag: f32,
+            targetID: f32,
+            mouseX: f32,
+            mouseY: f32,
+            mouseZ: f32,
+            mouseVelX: f32,
+            mouseVelY: f32,
+            mouseVelZ: f32,
+            pressure: f32,
+            viscosity: f32,
+            radius: f32,
+            padding: f32,
+        };
+
+        struct Particle {
+            pos: vec4<f32>, // xyz, galaxyID
+            vel: vec4<f32>, // xyz, mass
+        };
+
+        @group(0) @binding(0) var<uniform> params: Params;
+        @group(0) @binding(1) var<storage, read> posIn: array<Particle>;
+        @group(0) @binding(2) var<storage, read_write> posOut: array<Particle>;
+        @group(0) @binding(3) var<storage, read> velIn: array<Particle>;
+        @group(0) @binding(4) var<storage, read_write> velOut: array<Particle>;
+
+        var<workgroup> sharedPos: array<vec4<f32>, ${WORKGROUP_SIZE}>;
+        var<workgroup> sharedVel: array<vec4<f32>, ${WORKGROUP_SIZE}>;
+
+        @compute @workgroup_size(${WORKGROUP_SIZE})
+        fn simMain(@builtin(global_invocation_id) global_id: vec3<u32>, @builtin(local_invocation_id) local_id: vec3<u32>) {
+            let i = global_id.x;
+
+            var myPos = vec3<f32>(0.0);
+            var myVel = vec3<f32>(0.0);
+            var myID = 0.0;
+            var myMass = 1.0;
+            var isValid = false;
+
+            if (i < u32(params.count)) {
+                let pIn = posIn[i];
+                let vIn = velIn[i];
+                myPos = pIn.pos.xyz;
+                myVel = vIn.vel.xyz;
+                myID = pIn.pos.w;
+                myMass = vIn.vel.w;
+                isValid = true;
+            }
+
+            // --- Interaction ---
+            var isGrabbed = false;
+            // Check interaction using floating point equality with epsilon
+            if (isValid && params.mouseFlag > 0.5 && abs(myID - params.targetID) < 0.1) {
+                if (params.mouseFlag > 1.5) { // Grab Mode
+                   // Apply delta directly to position
+                   myPos = myPos + vec3<f32>(params.mouseX, params.mouseY, params.mouseZ);
+
+                   // Apply velocity force (smoothed in JS) to velocity
+                   // This allows "throwing" when released
+                   let throwVel = vec3<f32>(params.mouseVelX, params.mouseVelY, params.mouseVelZ);
+                   // Strong blend for grab feel
+                   myVel = mix(myVel, throwVel, 0.1);
+
+                   isGrabbed = true;
+                }
+            }
+
+            var acc = vec3<f32>(0.0);
+            var density = 0.0;
+
+            let numTiles = (u32(params.count) + ${WORKGROUP_SIZE}u - 1u) / ${WORKGROUP_SIZE}u;
+
+            for (var t = 0u; t < numTiles; t = t + 1u) {
+                let tileIdx = t * ${WORKGROUP_SIZE}u + local_id.x;
+                if (tileIdx < u32(params.count)) {
+                    sharedPos[local_id.x] = posIn[tileIdx].pos;
+                    sharedVel[local_id.x] = velIn[tileIdx].vel;
+                } else {
+                    sharedPos[local_id.x] = vec4<f32>(0.0);
+                    sharedVel[local_id.x] = vec4<f32>(0.0);
+                }
+                workgroupBarrier();
+
+                if (isValid) {
+                    for (var j = 0u; j < ${WORKGROUP_SIZE}u; j = j + 1u) {
+                        let otherPos4 = sharedPos[j];
+                        let otherVel4 = sharedVel[j];
+
+                        let diff = otherPos4.xyz - myPos;
+                        let distSq = dot(diff, diff);
+
+                        if (distSq > 0.00001) {
+                            let dist = sqrt(distSq);
+                            let otherMass = otherVel4.w;
+
+                            // 1. Gravity
+                            let softDistSq = distSq + params.soft;
+                            let softDist = sqrt(softDistSq);
+                            let f_grav = (params.G * otherMass) / (softDistSq * softDist); // Mass weighted
+                            acc = acc + f_grav * diff;
+
+                            // 2. SPH
+                            let sphRadius = params.radius;
+                            if (dist < sphRadius) {
+                                let q = dist / sphRadius;
+                                let ump = (1.0 - q);
+
+                                let f_press = params.pressure * ump * ump / (dist + 0.1);
+                                acc = acc - f_press * diff;
+
+                                let velDiff = otherVel4.xyz - myVel;
+                                let f_visc = params.viscosity * ump * velDiff;
+                                acc = acc + f_visc;
+
+                                density = density + ump * ump;
+                            }
+                        }
+                    }
+                }
+                workgroupBarrier();
+            }
+
+            if (isValid) {
+                // If grabbed, we manually updated pos/vel.
+                // Apply N-Body acceleration ONLY if NOT grabbed to avoid fighting mouse.
+                if (!isGrabbed) {
+                    myVel = myVel + acc * params.dt;
+                    myPos = myPos + myVel * params.dt;
+                }
+
+                // Speed Limit
+                if (length(myVel) > 100.0) { myVel = normalize(myVel) * 100.0; }
+
+                // Write Back
+                velOut[i].vel = vec4<f32>(myVel, myMass);
+                posOut[i].pos = vec4<f32>(myPos, myID);
+            }
+        }
+
+        // --- Renderer ---
+        struct RenderParams {
+            viewProj: mat4x4<f32>,
+            cameraRight: vec3<f32>,
+            padding: f32,
+            cameraUp: vec3<f32>,
+            padding2: f32,
+            sizeScale: f32,
+            padding3: vec3<f32>,
+        };
+        @group(0) @binding(0) var<uniform> rParams: RenderParams;
+
+        struct VSOut {
+            @builtin(position) pos: vec4<f32>,
+            @location(0) color: vec3<f32>,
+            @location(1) uv: vec2<f32>,
+        };
+
+        const quadPos = array<vec2<f32>, 4>(
+            vec2<f32>(-1.0, -1.0), vec2<f32>(1.0, -1.0),
+            vec2<f32>(-1.0,  1.0), vec2<f32>(1.0,  1.0)
+        );
+
+        @vertex
+        fn vsMain(@builtin(vertex_index) vIdx: u32,
+                  @location(0) particlePos: vec4<f32>,
+                  @location(1) particleVel: vec4<f32>) -> VSOut {
+
+            let id = particlePos.w;
+            let mass = particleVel.w;
+            let speed = length(particleVel.xyz);
+
+            let qPos = quadPos[vIdx];
+            let size = rParams.sizeScale * mass * 0.5; // Mass visualization
+
+            let worldPos = particlePos.xyz
+                         + rParams.cameraRight * qPos.x * size
+                         + rParams.cameraUp * qPos.y * size;
+
+            var out: VSOut;
+            out.pos = rParams.viewProj * vec4<f32>(worldPos, 1.0);
+            out.uv = qPos;
+
+            // Color Palette
+            var col = vec3<f32>(1.0);
+            if (abs(id - 0.0) < 0.1) { col = vec3<f32>(0.2, 0.5, 1.0); } // Main: Blue
+            else if (abs(id - 1.0) < 0.1) { col = vec3<f32>(1.0, 0.4, 0.1); } // Sub 1: Orange
+            else if (abs(id - 2.0) < 0.1) { col = vec3<f32>(0.2, 1.0, 0.4); } // Sub 2: Green
+
+            col = col + vec3<f32>(speed * 0.005);
+
+            out.color = col;
+            return out;
+        }
+
+        @fragment
+        fn fsMain(@location(0) color: vec3<f32>, @location(1) uv: vec2<f32>) -> @location(0) vec4<f32> {
+            let r = dot(uv, uv);
+            if (r > 1.0) { discard; }
+            let alpha = exp(-r * 3.0);
+            return vec4<f32>(color, alpha);
+        }
+        `;
+
+        async function init() {
+            if (!navigator.gpu) return;
+            const adapter = await navigator.gpu.requestAdapter();
+            const device = await adapter.requestDevice();
+            const canvas = document.getElementById('canvas');
+            const context = canvas.getContext('webgpu');
+            const format = navigator.gpu.getPreferredCanvasFormat();
+
+            context.configure({
+                device, format,
+                alphaMode: 'opaque'
+            });
+
+            const module = device.createShaderModule({ code: shaderCode });
+
+            const simPipeline = device.createComputePipeline({
+                layout: 'auto',
+                compute: { module, entryPoint: 'simMain' }
+            });
+
+            const renderPipeline = device.createRenderPipeline({
+                layout: 'auto',
+                vertex: {
+                    module, entryPoint: 'vsMain',
+                    buffers: [
+                        { arrayStride: 16, stepMode: 'instance', attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x4' }] },
+                        { arrayStride: 16, stepMode: 'instance', attributes: [{ shaderLocation: 1, offset: 0, format: 'float32x4' }] }
+                    ]
+                },
+                fragment: {
+                    module, entryPoint: 'fsMain',
+                    targets: [{
+                        format,
+                        blend: {
+                            color: { srcFactor: 'src-alpha', dstFactor: 'one', operation: 'add' },
+                            alpha: { srcFactor: 'zero', dstFactor: 'one', operation: 'add' }
+                        }
+                    }]
+                },
+                primitive: { topology: 'triangle-strip' },
+                depthStencil: undefined,
+            });
+
+            let posBuf0, posBuf1, velBuf0, velBuf1;
+            let simParamsBuf, renderParamsBuf;
+            let simBG0, simBG1;
+            let particleCount = 16384;
+            let galaxies = [];
+
+            const initBuffer = () => {
+                particleCount = parseInt(document.getElementById('p_count').value);
+                const size = particleCount * 16;
+                posBuf0 = device.createBuffer({ size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+                posBuf1 = device.createBuffer({ size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+                velBuf0 = device.createBuffer({ size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+                velBuf1 = device.createBuffer({ size, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
+            };
+
+            const resetGalaxy = () => {
+                const posData = new Float32Array(particleCount * 4);
+                const velData = new Float32Array(particleCount * 4);
+
+                galaxies = [];
+                // 1 Main + 2 Subs
+                const mainCount = Math.floor(particleCount * 0.5);
+                const subCount = Math.floor((particleCount - mainCount) / 2);
+
+                let pIdx = 0;
+                const createGal = (id, count, cx, cy, cz, radius, type) => {
+                    galaxies.push({ id, cx, cy, cz, radius });
+                    for(let i=0; i<count; i++) {
+                        if(pIdx >= particleCount) break;
+
+                        const angle = Math.random() * Math.PI * 2;
+                        const dist = Math.random() * radius * (Math.random()*0.5 + 0.5);
+                        const armOffset = type===0 ? (dist * 0.3 + (i%3)*(Math.PI*2/3)) : 0;
+
+                        const x = Math.cos(angle + armOffset) * dist;
+                        const z = Math.sin(angle + armOffset) * dist;
+                        const y = (Math.random() - 0.5) * (dist * 0.2);
+
+                        posData[pIdx*4+0] = cx + x;
+                        posData[pIdx*4+1] = cy + y;
+                        posData[pIdx*4+2] = cz + z;
+                        posData[pIdx*4+3] = id;
+
+                        // Orbit Velocity
+                        const massFactor = type===0 ? 500.0 : 100.0;
+                        const v = Math.sqrt(massFactor / (dist + 1.0));
+
+                        velData[pIdx*4+0] = -Math.sin(angle + armOffset) * v;
+                        velData[pIdx*4+1] = 0.0;
+                        velData[pIdx*4+2] = Math.cos(angle + armOffset) * v;
+
+                        // Mass Variation for Visuals
+                        velData[pIdx*4+3] = 0.5 + Math.random() * 2.0;
+
+                        pIdx++;
+                    }
+                };
+
+                createGal(0, mainCount, 0, 0, 0, 40.0, 0);
+
+                // Sub 1
+                {
+                    const r = 80.0;
+                    const angle = 0.0;
+                    const cx = Math.cos(angle) * r;
+                    const cz = Math.sin(angle) * r;
+                    createGal(1, subCount, cx, 10.0, cz, 15.0, 1);
+
+                    const vOx = -Math.sin(angle) * 12.0;
+                    const vOz = Math.cos(angle) * 12.0;
+                    const start = mainCount;
+                    for(let k=start; k<start+subCount; k++) {
+                        velData[k*4+0] += vOx;
+                        velData[k*4+2] += vOz;
+                    }
+                }
+
+                // Sub 2
+                {
+                    const r = 80.0;
+                    const angle = Math.PI;
+                    const cx = Math.cos(angle) * r;
+                    const cz = Math.sin(angle) * r;
+                    createGal(2, subCount, cx, -10.0, cz, 15.0, 1);
+
+                    const vOx = -Math.sin(angle) * 12.0;
+                    const vOz = Math.cos(angle) * 12.0;
+                    const start = mainCount + subCount;
+                    for(let k=start; k<particleCount; k++) {
+                        velData[k*4+0] += vOx;
+                        velData[k*4+2] += vOz;
+                    }
+                }
+
+                device.queue.writeBuffer(posBuf0, 0, posData);
+                device.queue.writeBuffer(velBuf0, 0, velData);
+
+                const createBG = (pIn, pOut, vIn, vOut) => device.createBindGroup({
+                    layout: simPipeline.getBindGroupLayout(0),
+                    entries: [
+                        { binding: 0, resource: { buffer: simParamsBuf } },
+                        { binding: 1, resource: { buffer: pIn } },
+                        { binding: 2, resource: { buffer: pOut } },
+                        { binding: 3, resource: { buffer: vIn } },
+                        { binding: 4, resource: { buffer: vOut } },
+                    ]
+                });
+                simBG0 = createBG(posBuf0, posBuf1, velBuf0, velBuf1);
+                simBG1 = createBG(posBuf1, posBuf0, velBuf1, velBuf0);
+            };
+
+            // Init Buffers
+            simParamsBuf = device.createBuffer({ size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+            renderParamsBuf = device.createBuffer({ size: 128, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+
+            initBuffer();
+            resetGalaxy();
+
+            document.getElementById('btn_reset').onclick = () => {
+                const newCount = parseInt(document.getElementById('p_count').value);
+                if(newCount !== particleCount) {
+                    initBuffer();
+                }
+                resetGalaxy();
+            };
+
+            let camRotX = 0.5, camRotY = 0.5, camDist = 200.0;
+            let mouseFlag = 0;
+            let grabID = -1;
+            let lastX, lastY;
+            let grabWorldPos = [0,0,0];
+            let mouseWorldPos = [0,0,0];
+
+            const getRay = (ex, ey, vp) => {
+                const rect = canvas.getBoundingClientRect();
+                const x = ((ex - rect.left) / rect.width) * 2 - 1;
+                const y = -((ey - rect.top) / rect.height) * 2 + 1;
+                const invVP = Mat4.create(); Mat4.invert(invVP, vp);
+                const n = [x, y, 0, 1], f = [x, y, 1, 1];
+                const tn = new Float32Array(4), tf = new Float32Array(4);
+                Mat4.multiply(tn, invVP, n); Mat4.multiply(tf, invVP, f);
+                const pn = [tn[0]/tn[3], tn[1]/tn[3], tn[2]/tn[3]];
+                const pf = [tf[0]/tf[3], tf[1]/tf[3], tf[2]/tf[3]];
+                return { origin: pn, dir: [pf[0]-pn[0], pf[1]-pn[1], pf[2]-pn[2]] };
+            };
+
+            const pickGalaxy = (ray) => {
+                let minDist = Infinity;
+                let id = -1;
+                for(let g of galaxies) {
+                    const oc = [g.cx - ray.origin[0], g.cy - ray.origin[1], g.cz - ray.origin[2]];
+                    const t = (oc[0]*ray.dir[0] + oc[1]*ray.dir[1] + oc[2]*ray.dir[2]) /
+                              (ray.dir[0]**2 + ray.dir[1]**2 + ray.dir[2]**2);
+
+                    const p = [ray.origin[0] + ray.dir[0]*t, ray.origin[1] + ray.dir[1]*t, ray.origin[2] + ray.dir[2]*t];
+                    const dist = Math.hypot(g.cx-p[0], g.cy-p[1], g.cz-p[2]);
+
+                    if (dist < 40.0 && dist < minDist) {
+                        minDist = dist;
+                        id = g.id;
+                        grabWorldPos = [g.cx, g.cy, g.cz];
+                    }
+                }
+                return id;
+            };
+
+            const intersectPlane = (ray, planePoint, planeNormal) => {
+                const denom = ray.dir[0]*planeNormal[0] + ray.dir[1]*planeNormal[1] + ray.dir[2]*planeNormal[2];
+                if (Math.abs(denom) < 0.0001) return planePoint;
+                const t = ((planePoint[0]-ray.origin[0])*planeNormal[0] + (planePoint[1]-ray.origin[1])*planeNormal[1] + (planePoint[2]-ray.origin[2])*planeNormal[2]) / denom;
+                return [ray.origin[0] + ray.dir[0]*t, ray.origin[1] + ray.dir[1]*t, ray.origin[2] + ray.dir[2]*t];
+            };
+
+            canvas.addEventListener('mousedown', e => {
+                lastX = e.clientX; lastY = e.clientY;
+                if (e.shiftKey) {
+                    const aspect = canvas.width/canvas.height;
+                    const proj = Mat4.perspective(Mat4.create(), Math.PI/3, aspect, 1.0, 5000.0);
+                    const eye = [
+                        Math.sin(camRotX) * Math.sin(camRotY) * camDist,
+                        Math.cos(camRotX) * camDist,
+                        Math.sin(camRotX) * Math.cos(camRotY) * camDist
+                    ];
+                    const view = Mat4.lookAt(Mat4.create(), eye, [0,0,0], [0,1,0]);
+                    const vp = Mat4.multiply(Mat4.create(), proj, view);
+
+                    const ray = getRay(e.clientX, e.clientY, vp);
+                    grabID = pickGalaxy(ray);
+                    if (grabID !== -1) {
+                        mouseFlag = 2;
+                    }
+                } else {
+                    mouseFlag = 1;
+                }
+            });
+
+            canvas.addEventListener('mousemove', e => {
+                if (mouseFlag === 1) {
+                    camRotX -= (e.clientY - lastY) * 0.005;
+                    camRotY -= (e.clientX - lastX) * 0.005;
+                    camRotX = Math.max(0.1, Math.min(Math.PI-0.1, camRotX));
+                } else if (mouseFlag === 2) {
+                    const camDir = [
+                        -Math.sin(camRotX) * Math.sin(camRotY),
+                        -Math.cos(camRotX),
+                        -Math.sin(camRotX) * Math.cos(camRotY)
+                    ];
+                    const aspect = canvas.width/canvas.height;
+                    const proj = Mat4.perspective(Mat4.create(), Math.PI/3, aspect, 1.0, 5000.0);
+                    const eye = [
+                        Math.sin(camRotX) * Math.sin(camRotY) * camDist,
+                        Math.cos(camRotX) * camDist,
+                        Math.sin(camRotX) * Math.cos(camRotY) * camDist
+                    ];
+                    const view = Mat4.lookAt(Mat4.create(), eye, [0,0,0], [0,1,0]);
+                    const vp = Mat4.multiply(Mat4.create(), proj, view);
+
+                    const ray = getRay(e.clientX, e.clientY, vp);
+                    const pos = intersectPlane(ray, grabWorldPos, camDir);
+
+                    const g = galaxies.find(gx => gx.id === grabID);
+                    if(g) {
+                        const dx = pos[0] - g.cx;
+                        const dy = pos[1] - g.cy;
+                        const dz = pos[2] - g.cz;
+                        // Accumulate Delta logic
+                        mouseWorldPos[0] += dx;
+                        mouseWorldPos[1] += dy;
+                        mouseWorldPos[2] += dz;
+                        g.cx = pos[0]; g.cy = pos[1]; g.cz = pos[2];
+                    }
+                }
+                lastX = e.clientX; lastY = e.clientY;
+            });
+            window.addEventListener('mouseup', () => {
+                mouseFlag = 0;
+                grabID = -1;
+                mouseWorldPos = [0,0,0];
+            });
+            canvas.addEventListener('wheel', e => {
+                camDist += e.deltaY * 0.1;
+                camDist = Math.max(10.0, camDist);
+                e.preventDefault();
+            }, {passive: false});
+
+            const getVal = (id) => parseFloat(document.getElementById(id).value);
+            const bindLabel = (id, target) => {
+                document.getElementById(id).addEventListener('input', e => {
+                    document.getElementById(target).innerText = e.target.value;
+                });
+            };
+            bindLabel('p_dt', 'v_dt');
+            bindLabel('p_g', 'v_g');
+            bindLabel('p_pressure', 'v_pressure');
+            bindLabel('p_visc', 'v_visc');
+            bindLabel('p_soft', 'v_soft');
+            bindLabel('p_size', 'v_size');
+            document.getElementById('p_count').addEventListener('change', e => {
+                document.getElementById('v_count').innerText = e.target.value;
+            });
+
+            let step = 0;
+            let lastTime = 0;
+
+            function frame(timestamp) {
+                const dt_ms = timestamp - lastTime;
+                lastTime = timestamp;
+
+                canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+
+                const dt = getVal('p_dt');
+                const G = getVal('p_g');
+                const soft = getVal('p_soft');
+                const p = getVal('p_pressure');
+                const v = getVal('p_visc');
+                const size = getVal('p_size');
+
+                const aspect = canvas.width / canvas.height;
+                const proj = Mat4.perspective(Mat4.create(), Math.PI/3, aspect, 1.0, 5000.0);
+                const eye = [
+                    Math.sin(camRotX) * Math.sin(camRotY) * camDist,
+                    Math.cos(camRotX) * camDist,
+                    Math.sin(camRotX) * Math.cos(camRotY) * camDist
+                ];
+                const view = Mat4.lookAt(Mat4.create(), eye, [0,0,0], [0,1,0]);
+                const vp = Mat4.multiply(Mat4.create(), proj, view);
+
+                const F = [-eye[0], -eye[1], -eye[2]];
+                const lenF = Math.hypot(F[0], F[1], F[2]);
+                const fwd = [F[0]/lenF, F[1]/lenF, F[2]/lenF];
+                const rRaw = [fwd[1]*0 - fwd[2]*1, fwd[2]*0 - fwd[0]*0, fwd[0]*1 - fwd[1]*0];
+                const lenR = Math.hypot(rRaw[0], rRaw[1], rRaw[2]);
+                const right = lenR < 0.001 ? [1,0,0] : [rRaw[0]/lenR, rRaw[1]/lenR, rRaw[2]/lenR];
+                const upVec = [
+                    right[1]*fwd[2] - right[2]*fwd[1],
+                    right[2]*fwd[0] - right[0]*fwd[2],
+                    right[0]*fwd[1] - right[1]*fwd[0]
+                ];
+
+                let velX = 0, velY = 0, velZ = 0;
+                if (mouseFlag === 2) {
+                     // Scale delta to be a velocity force
+                     // Delta is movement per frame.
+                     // Velocity = Delta / dt * ForceFactor
+                     velX = mouseWorldPos[0] / dt * 0.15;
+                     velY = mouseWorldPos[1] / dt * 0.15;
+                     velZ = mouseWorldPos[2] / dt * 0.15;
+                }
+
+                const simData = new Float32Array([
+                    particleCount, dt, G, soft,
+                    p, v, 2.0, 0,
+                    mouseFlag, grabID, mouseWorldPos[0], mouseWorldPos[1],
+                    mouseWorldPos[2], velX, velY, velZ
+                ]);
+                device.queue.writeBuffer(simParamsBuf, 0, simData);
+
+                if (mouseFlag === 2) mouseWorldPos = [0,0,0];
+
+                const rData = new Float32Array(32);
+                rData.set(vp, 0);
+                rData.set([...right, 0], 16);
+                rData.set([...upVec, 0], 20);
+                rData[24] = size;
+                device.queue.writeBuffer(renderParamsBuf, 0, rData);
+
+                const enc = device.createCommandEncoder();
+
+                const cPass = enc.beginComputePass();
+                cPass.setPipeline(simPipeline);
+                cPass.setBindGroup(0, step % 2 === 0 ? simBG0 : simBG1);
+                cPass.dispatchWorkgroups(Math.ceil(particleCount / WORKGROUP_SIZE));
+                cPass.end();
+
+                const rPass = enc.beginRenderPass({
+                    colorAttachments: [{ view: context.getCurrentTexture().createView(), loadOp: 'clear', clearValue: {r:0,g:0,b:0,a:1}, storeOp: 'store' }]
+                });
+                rPass.setPipeline(renderPipeline);
+
+                if (step % 2 === 0) {
+                     rPass.setBindGroup(0, device.createBindGroup({
+                         layout: renderPipeline.getBindGroupLayout(0),
+                         entries: [{binding: 0, resource: {buffer: renderParamsBuf}}]
+                     }));
+                     rPass.setVertexBuffer(0, posBuf1);
+                     rPass.setVertexBuffer(1, velBuf1);
+                } else {
+                     rPass.setBindGroup(0, device.createBindGroup({
+                         layout: renderPipeline.getBindGroupLayout(0),
+                         entries: [{binding: 0, resource: {buffer: renderParamsBuf}}]
+                     }));
+                     rPass.setVertexBuffer(0, posBuf0);
+                     rPass.setVertexBuffer(1, velBuf0);
+                }
+
+                rPass.draw(4, particleCount, 0, 0);
+                rPass.end();
+
+                device.queue.submit([enc.finish()]);
+                step++;
+
+                // Calculate FPS
+                const now = performance.now();
+                const delta = now - lastTime;
+                if (step % 10 === 0) {
+                     document.getElementById('fps').innerText = `FPS: ${Math.round(1000 / delta)}`;
+                }
+
+                requestAnimationFrame(frame);
+            }
+            requestAnimationFrame(frame);
+        }
+        init();
+    </script>
+</body>
+</html>
