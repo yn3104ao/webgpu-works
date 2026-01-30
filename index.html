@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,6 +14,7 @@
             --f1-color: #f0f;
             --border: #333;
         }
+
         body {
             margin: 0;
             background: var(--bg);
@@ -23,11 +25,13 @@
             align-items: center;
             min-height: 100vh;
         }
+
         header {
             margin-top: 80px;
             margin-bottom: 60px;
             text-align: center;
         }
+
         h1 {
             font-size: 3.5rem;
             margin: 0;
@@ -36,6 +40,7 @@
             -webkit-text-fill-color: transparent;
             letter-spacing: -1px;
         }
+
         p.subtitle {
             color: #666;
             font-size: 1.2rem;
@@ -65,15 +70,23 @@
             height: 360px;
             position: relative;
         }
+
         .card:hover {
             transform: translateY(-8px);
-            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
             border-color: var(--accent);
         }
 
         /* Project Specifics */
-        .card.f1:hover { border-color: var(--f1-color); box-shadow: 0 20px 40px rgba(255, 0, 255, 0.15); }
-        .card.galaxy:hover { border-color: #a0f; box-shadow: 0 20px 40px rgba(170, 0, 255, 0.15); }
+        .card.f1:hover {
+            border-color: var(--f1-color);
+            box-shadow: 0 20px 40px rgba(255, 0, 255, 0.15);
+        }
+
+        .card.galaxy:hover {
+            border-color: #a0f;
+            box-shadow: 0 20px 40px rgba(170, 0, 255, 0.15);
+        }
 
         .preview {
             flex: 1.2;
@@ -86,16 +99,31 @@
             overflow: hidden;
         }
 
-        .preview.f1-bg { background: radial-gradient(circle at bottom right, #202 0%, #000 80%); }
-        .preview.skin-bg { background: radial-gradient(circle at top left, #022 0%, #000 80%); }
-        .preview.galaxy-bg { background: radial-gradient(circle at center, #204 0%, #000 100%); }
+        .preview.f1-bg {
+            background: radial-gradient(circle at bottom right, #202 0%, #000 80%);
+        }
+
+        .preview.skin-bg {
+            background: radial-gradient(circle at top left, #022 0%, #000 80%);
+        }
+
+        .preview.galaxy-bg {
+            background: radial-gradient(circle at center, #204 0%, #000 100%);
+        }
+
+        .preview.ai-vision-bg {
+            background: radial-gradient(circle at top right, rgb(0, 18, 68) 0%, #000 100%);
+        }
 
         .icon {
             font-size: 4rem;
-            filter: drop-shadow(0 0 20px rgba(0,0,0,0.5));
+            filter: drop-shadow(0 0 20px rgba(0, 0, 0, 0.5));
             transition: transform 0.3s ease;
         }
-        .card:hover .icon { transform: scale(1.1); }
+
+        .card:hover .icon {
+            transform: scale(1.1);
+        }
 
         .info {
             flex: 1;
@@ -105,17 +133,35 @@
             justify-content: space-between;
             border-top: 1px solid var(--border);
         }
-        h2 { margin: 0 0 5px 0; font-size: 1.4rem; font-weight: 600; }
-        .desc { font-size: 0.9rem; color: #aaa; line-height: 1.5; margin-bottom: 15px; }
 
-        .tags { margin-top: auto; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+        h2 {
+            margin: 0 0 5px 0;
+            font-size: 1.4rem;
+            font-weight: 600;
+        }
+
+        .desc {
+            font-size: 0.9rem;
+            color: #aaa;
+            line-height: 1.5;
+            margin-bottom: 15px;
+        }
+
+        .tags {
+            margin-top: auto;
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
         .tag {
             font-size: 0.7rem;
             padding: 3px 8px;
             border-radius: 4px;
-            background: rgba(255,255,255,0.05);
+            background: rgba(255, 255, 255, 0.05);
             color: #ccc;
-            border: 1px solid rgba(255,255,255,0.1);
+            border: 1px solid rgba(255, 255, 255, 0.1);
             font-family: 'Roboto Mono', monospace;
         }
 
@@ -125,10 +171,21 @@
             font-weight: bold;
             padding: 2px 6px;
             border-radius: 4px;
-            margin-right: auto; /* Push tags to right */
+            margin-right: auto;
+            /* Push tags to right */
         }
-        .pc-only { color: #f55; border: 1px solid #f55; background: rgba(255,85,85,0.1); }
-        .mobile-ok { color: #5f5; border: 1px solid #5f5; background: rgba(85,255,85,0.1); }
+
+        .pc-only {
+            color: #f55;
+            border: 1px solid #f55;
+            background: rgba(255, 85, 85, 0.1);
+        }
+
+        .mobile-ok {
+            color: #5f5;
+            border: 1px solid #5f5;
+            background: rgba(85, 255, 85, 0.1);
+        }
 
         footer {
             margin-top: auto;
@@ -136,10 +193,19 @@
             color: #444;
             font-size: 0.9rem;
         }
-        a.author { color: #666; text-decoration: none; transition: color 0.2s; }
-        a.author:hover { color: var(--accent); }
+
+        a.author {
+            color: #666;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        a.author:hover {
+            color: var(--accent);
+        }
     </style>
 </head>
+
 <body>
 
     <header>
@@ -151,11 +217,14 @@
 
         <!-- 1. F1 -->
         <a href="./f1-aero/index.html" class="card f1">
-            <div class="preview f1-bg"><div class="icon">🏎️</div></div>
+            <div class="preview f1-bg">
+                <div class="icon">🏎️</div>
+            </div>
             <div class="info">
                 <div>
                     <h2>F1 CFD</h2>
-                    <div class="desc">Real-time 3D fluid dynamics around a Formula 1 car visualizing ground effect.</div>
+                    <div class="desc">Real-time 3D fluid dynamics around a Formula 1 car visualizing ground effect.
+                    </div>
                 </div>
                 <div class="tags">
                     <span class="device-badge pc-only">PC RECOMMENDED</span>
@@ -167,7 +236,9 @@
 
         <!-- 2. Reactive Sphere -->
         <a href="./reactive-sphere/index.html" class="card skin">
-            <div class="preview skin-bg"><div class="icon">🧬</div></div>
+            <div class="preview skin-bg">
+                <div class="icon">🧬</div>
+            </div>
             <div class="info">
                 <div>
                     <h2>Reactive Sphere</h2>
@@ -182,7 +253,8 @@
         </a>
 
         <!-- 3. Galaxy -->
-        <a href="./galaxy-merger/index.html" class="card galaxy">
+        <!--
+        a href="./galaxy-merger/index.html" class="card galaxy">
             <div class="preview galaxy-bg"><div class="icon">🌌</div></div>
             <div class="info">
                 <div>
@@ -196,6 +268,25 @@
                 </div>
             </div>
         </a>
+        -->
+
+        <!-- 4. AI Vision -->
+        <a href="./ai-vision/index.html" class="card ai-vision">
+            <div class="preview ai-vision-bg">
+                <div class="icon">🤖</div>
+            </div>
+            <div class="info">
+                <div>
+                    <h2>AI Vision</h2>
+                    <div class="desc">Real-time point cloud rendering from video using WebGPU Compute Shaders.</div>
+                </div>
+                <div class="tags">
+                    <span class="device-badge mobile-ok">MOBILE READY</span>
+                    <span class="tag">Point Cloud</span>
+                    <span class="tag">Compute</span>
+                </div>
+            </div>
+        </a>
 
     </div>
 
@@ -204,4 +295,5 @@
     </footer>
 
 </body>
+
 </html>

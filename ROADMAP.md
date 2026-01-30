@@ -12,29 +12,22 @@ Demonstrating raw compute power through physical simulations.
 
 - [x] 🌌 **N-Body Galaxy**: Massive particle simulation with tiled compute optimization.
 
-## 🚧 Phase 2: Advanced Rendering (Next Up)
+## ✅ Phase 2: Advanced Rendering (Completed)
 
 Pushing graphical fidelity beyond standard rasterization.
 
-- [ ] **Raytracing / Path Tracing**:
+- [x] 🏎️ **F1 Aerodynamics CFD**: Real-time Raymarching and flow visualization.
 
-  - Real-time global illumination using a compute-based raytracer.
+- [ ] **Real-time Path Tracing**: Global illumination using compute-based raytracing.
 
-  - Scenes with glass, water (caustics), and soft shadows.
-
-  - *Goal*: Show off "Photorealism in the Browser".
-
-## 🔮 Phase 3: AI & Machine Learning
+## ✅ Phase 3: AI & Machine Learning (Completed)
 
 Leveraging WebGPU for client-side AI inference (Edge AI).
 
-- [ ] **Visualizing Neural Networks**:
-
-  - Instead of a text box, visualize the activations of a neural network layer in 3D space.
-
-  - Example: Real-time Depth Estimation from webcam feed, rendered as a point cloud.
-
-  - *Tech*: WebNN / Transformers.js with WebGPU backend.
+- [x] 🔭 **AI Vision**:
+  - Real-time Depth Estimation from webcam feed.
+  - Semantic Isolation (Background Pruning) using SegFormer.
+  - *Tech*: WebGPU, Transformers.js (ONNX), Web Workers.
 
 ## ⚙️ Phase 4: Hardware Visualization
 

@@ -11,11 +11,12 @@ This repository serves as a personal playground to push the limits of modern web
 
 ## 📂 Projects
 
-|Project|Description|Tech Stack|
-|---|---|---|
-|[🏎️ F1 Aerodynamics](./f1-aero/README.md)|Real-time 3D Computational Fluid Dynamics (CFD) simulation visualizing Ground Effect and Wake Turbulence around a formula car.|`Compute Shaders` `Eulerian Grid` `Raymarching`|
-|[🧬 Reactive Sphere](./reactive-sphere/README.md)|An interactive generative art piece simulating the Gray-Scott Reaction-Diffusion model, mapped onto a pulsating 3D sphere.|`Reaction-Diffusion` `Vertex Displacement` `Tiling`|
-|🌌 N-Body Sandbox|Massive particle physics simulation (up to 65k+ particles) demonstrating gravity, collision, and SPH-like fluid dynamics.|`N-Body` `Shared Memory` `Tiled Compute`|
+| Project                                          | Description                                                                                                                    | Tech Stack                                          |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- |
+| [🏎️ F1 Aerodynamics](./f1-aero/README.md)         | Real-time 3D Computational Fluid Dynamics (CFD) simulation visualizing Ground Effect and Wake Turbulence around a formula car. | `Compute Shaders` `Eulerian Grid` `Raymarching`     |
+| [🔭 AI Vision](./ai-vision/README.md)             | Real-time 3D point cloud reconstruction from webcam feed using client-side depth estimation and semantic segmentation models.  | `WebGPU` `Transformers.js` `Depth Anything`         |
+| [🧬 Reactive Sphere](./reactive-sphere/README.md) | An interactive generative art piece simulating the Gray-Scott Reaction-Diffusion model, mapped onto a pulsating 3D sphere.     | `Reaction-Diffusion` `Vertex Displacement` `Tiling` |
+| 🌌 N-Body Sandbox                                 | Massive particle physics simulation (up to 65k+ particles) demonstrating gravity, collision, and SPH-like fluid dynamics.      | `N-Body` `Shared Memory` `Tiled Compute`            |
 
 ## 🤝 Development Story
 
@@ -31,11 +32,9 @@ I built this project through an intensive pair-programming session with **Google
 
 Future ideas to explore the capabilities of WebGPU:
 
-- [ ] 🤖 **In-Browser AI Vision**: Real-time 3D point cloud reconstruction from webcam feed using client-side ML models.
+- [ ] 🕯️ **Real-time Raytracing**: Photorealistic rendering with soft shadows, reflections, and path tracing in the browser.
 
 - [ ] ⚙️ **GPU Hardware Visualizer**: Educational visualizations of GPU architecture (e.g., Bitonic Sort, Warp Divergence).
-
-- [ ] 🕯️ **Real-time Raytracing**: Photorealistic rendering with soft shadows and reflections.
 
 ## 🛠️ Tech Stack
 
